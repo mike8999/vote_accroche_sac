@@ -394,6 +394,61 @@
       toast.classList.add("show");
       setTimeout(() => toast.classList.remove("show"), 3000);
     }
+
+    // ── Reset (taper R-E-S-E-T au clavier sur la page) ──
+    const RESET_PASSWORD = "RESET";
+    let keyBuffer = "";
+    document.addEventListener("keydown", e => {
+      keyBuffer += e.key.toUpperCase();
+      if (keyBuffer.length > RESET_PASSWORD.length)
+        keyBuffer = keyBuffer.slice(-RESET_PASSWORD.length);
+      if (keyBuffer === RESET_PASSWORD) {
+        document.getElementById("reset-box").style.display = "block";
+        document.getElementById("reset-input").focus();
+        keyBuffer = "";
+      }
+    });
+
+    function cancelReset() {
+      document.getElementById("reset-box").style.display = "none";
+      document.getElementById("reset-input").value = "";
+      document.getElementById("reset-error").style.display = "none";
+    }
+
+    async function confirmReset() {
+      const val = document.getElementById("reset-input").value;
+      if (val !== RESET_PASSWORD) {
+        document.getElementById("reset-error").style.display = "block";
+        return;
+      }
+      try {
+        await votesRef.remove();
+        await votersRef.remove();
+        localStorage.removeItem(STORAGE_KEY);
+        alreadyVoted = false;
+        document.body.classList.remove("voted");
+        selected.clear();
+        document.querySelectorAll(".card.selected").forEach(c => c.classList.remove("selected"));
+        selInfo.innerHTML = "<strong>0</strong> sélectionnée(s)";
+        btnVote.disabled = true;
+        cancelReset();
+        showToast("Votes réinitialisés ✓");
+      } catch(e) {
+        console.error(e);
+        showToast("Erreur lors du reset.");
+      }
+    }
   </script>
+
+  <!-- Boîte de reset cachée -->
+  <div id="reset-box" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:16px;padding:28px 32px;box-shadow:0 8px 40px rgba(0,0,0,0.18);z-index:999;text-align:center;min-width:280px;">
+    <p style="font-family:'DM Sans',sans-serif;font-size:1rem;margin-bottom:16px;color:#1a1714;">🔒 Mot de passe pour réinitialiser :</p>
+    <input id="reset-input" type="password" placeholder="Mot de passe" style="width:100%;padding:10px 14px;border:2px solid #e5e0da;border-radius:8px;font-size:1rem;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:12px;"/>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button onclick="cancelReset()" style="padding:10px 20px;border-radius:999px;border:2px solid #e5e0da;background:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:0.9rem;">Annuler</button>
+      <button onclick="confirmReset()" style="padding:10px 20px;border-radius:999px;border:none;background:#d45f2e;color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:0.9rem;font-weight:600;">Réinitialiser</button>
+    </div>
+    <p id="reset-error" style="color:#c0392b;font-size:0.82rem;margin-top:10px;display:none;">Mot de passe incorrect.</p>
+  </div>
 </body>
 </html>
