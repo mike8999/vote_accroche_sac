@@ -82,6 +82,30 @@
     .modal-actions button{padding:10px 20px;border-radius:999px;font-family:"DM Sans",sans-serif;font-size:.9rem;font-weight:600;cursor:pointer;border:2px solid #e5e0da;background:#fff}
     .modal-actions button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
     .modal-error{color:#c0392b;font-size:.82rem;margin-top:8px;display:none}
+
+    /* ── Podium ── */
+    #btn-podium{display:block;margin:28px auto 0;padding:14px 36px;border-radius:999px;border:none;background:var(--accent);color:#fff;font-family:"DM Sans",sans-serif;font-size:1rem;font-weight:600;cursor:pointer;transition:background .2s,transform .15s}
+    #btn-podium:hover{background:#9a3412;transform:scale(1.03)}
+    #podium-overlay{display:none;position:fixed;inset:0;background:rgba(15,10,5,.85);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:0;padding:20px}
+    #podium-overlay.open{display:flex}
+    .podium-close{position:absolute;top:20px;right:24px;background:none;border:none;color:#fff;font-size:1.8rem;cursor:pointer;opacity:.7;transition:opacity .2s}
+    .podium-close:hover{opacity:1}
+    .podium-title{font-family:"DM Serif Display",serif;font-size:clamp(1.1rem,3vw,1.5rem);color:#fbbf24;text-align:center;margin-bottom:24px;letter-spacing:.02em}
+    .podium-winner{display:flex;flex-direction:column;align-items:center;gap:14px;animation:pop .5s ease}
+    @keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+    .podium-winner img{width:min(280px,70vw);height:min(280px,70vw);object-fit:contain;background:#fff;border-radius:16px;padding:8px;box-shadow:0 8px 40px rgba(0,0,0,.4)}
+    .podium-winner-label{font-family:"DM Serif Display",serif;font-size:clamp(1.2rem,4vw,1.8rem);color:#fff;text-align:center}
+    .podium-winner-score{font-size:.9rem;color:#fbbf24;font-weight:600;text-align:center}
+    .podium-places{display:flex;align-items:flex-end;justify-content:center;gap:12px;margin-top:24px;width:100%;max-width:500px}
+    .podium-place{display:flex;flex-direction:column;align-items:center;gap:8px}
+    .podium-place img{object-fit:contain;background:#fff;border-radius:10px;padding:4px}
+    .podium-place .place-label{font-size:.75rem;color:rgba(255,255,255,.7);text-align:center;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .podium-place .place-score{font-size:.72rem;color:#fbbf24;font-weight:600}
+    .podium-block{border-radius:8px 8px 0 0;width:100%;display:flex;align-items:center;justify-content:center;font-family:"DM Serif Display",serif;font-weight:400;color:#fff}
+    .place-2nd img{width:72px;height:72px}
+    .place-2nd .podium-block{height:60px;background:#78716c;font-size:1.4rem}
+    .place-3rd img{width:60px;height:60px}
+    .place-3rd .podium-block{height:44px;background:#57534e;font-size:1.2rem}
   </style>
 </head>
 <body>
@@ -113,6 +137,19 @@
   <h2>Resultats</h2>
   <p class="subtitle" id="results-subtitle"></p>
   <div id="results-list"></div>
+  <button id="btn-podium" onclick="showPodium()">🏆 Voir le podium</button>
+</div>
+
+<!-- Podium overlay -->
+<div id="podium-overlay">
+  <button class="podium-close" onclick="document.getElementById('podium-overlay').classList.remove('open')">&#x2715;</button>
+  <div class="podium-title">Le vainqueur est&hellip;</div>
+  <div class="podium-winner">
+    <img id="podium-img" src="" alt=""/>
+    <div class="podium-winner-label" id="podium-label"></div>
+    <div class="podium-winner-score" id="podium-score"></div>
+  </div>
+  <div class="podium-places" id="podium-places"></div>
 </div>
 
 <div id="nav-bar">
@@ -329,6 +366,7 @@ async function loadAndShowResults() {
   var allEvals = evalsSnap.val() || {};
   var total = countSnap.val() || 0;
   console.log("total evals:", total, "allEvals keys:", Object.keys(allEvals).length);
+  computePodiumScores(allEvals);
 
   var sums = {}, counts = {};
   Object.values(allEvals).forEach(function(ev) {
@@ -427,6 +465,61 @@ function showToast(msg) {
   t.textContent = msg;
   t.classList.add("show");
   setTimeout(function(){ t.classList.remove("show"); }, 3000);
+}
+
+// ── Podium ──
+var podiumScores = {};
+
+function computePodiumScores(allEvals) {
+  podiumScores = {};
+  IMAGES.forEach(function(img) {
+    var total = 0, count = 0;
+    Object.values(allEvals).forEach(function(ev) {
+      if (!ev[img.id]) return;
+      CRITERIA.forEach(function(cr) {
+        if (ev[img.id][cr.id] !== undefined) {
+          total += ev[img.id][cr.id];
+          count++;
+        }
+      });
+    });
+    podiumScores[img.id] = count > 0 ? total / count : 0;
+  });
+}
+
+function showPodium() {
+  var sorted = IMAGES.slice().sort(function(a, b) {
+    return (podiumScores[b.id] || 0) - (podiumScores[a.id] || 0);
+  });
+
+  var winner = sorted[0];
+  var second = sorted[1];
+  var third  = sorted[2];
+
+  document.getElementById("podium-img").src = winner.src;
+  document.getElementById("podium-label").textContent = winner.label;
+  var ws = podiumScores[winner.id];
+  document.getElementById("podium-score").textContent = "Score moyen : " + (ws >= 0 ? "+" : "") + ws.toFixed(2) + " / +2.00";
+
+  var places = document.getElementById("podium-places");
+  places.innerHTML = "";
+
+  [second, third].forEach(function(img, i) {
+    if (!img) return;
+    var cls = i === 0 ? "place-2nd" : "place-3rd";
+    var medal = i === 0 ? "2e" : "3e";
+    var sc = podiumScores[img.id];
+    var div = document.createElement("div");
+    div.className = "podium-place " + cls;
+    div.innerHTML = "<img src=\"" + img.src + "\" alt=\"" + img.label + "\"/>"
+      + "<div class=\"podium-block\">" + medal + "</div>"
+      + "<div class=\"place-label\">" + img.label + "</div>"
+      + "<div class=\"place-score\">" + (sc >= 0 ? "+" : "") + sc.toFixed(2) + "</div>";
+    if (i === 0) places.insertBefore(div, places.firstChild);
+    else places.appendChild(div);
+  });
+
+  document.getElementById("podium-overlay").classList.add("open");
 }
 
 if (alreadyDone) {
