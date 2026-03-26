@@ -316,10 +316,19 @@ revealRef.on("value", function(snap) {
 });
 
 async function loadAndShowResults() {
-  var evalsSnap = await evalsRef.once("value");
-  var countSnap = await countRef.once("value");
+  console.log("loadAndShowResults called");
+  var evalsSnap, countSnap;
+  try {
+    evalsSnap = await evalsRef.once("value");
+    countSnap = await countRef.once("value");
+  } catch(e) {
+    console.error("Firebase read error:", e);
+    showToast("Erreur lecture Firebase : " + e.message);
+    return;
+  }
   var allEvals = evalsSnap.val() || {};
   var total = countSnap.val() || 0;
+  console.log("total evals:", total, "allEvals keys:", Object.keys(allEvals).length);
 
   var sums = {}, counts = {};
   Object.values(allEvals).forEach(function(ev) {
@@ -374,8 +383,9 @@ document.addEventListener("keydown", function(e) {
   if (kbuf.endsWith("RESULT")) { openModal("modal-reveal"); kbuf = ""; }
 });
 
-function openModal(id)  { document.getElementById(id).classList.add("open"); }
+function openModal(id)  { kbuf = ""; document.getElementById(id).classList.add("open"); }
 function closeModal(id) {
+  kbuf = "";
   document.getElementById(id).classList.remove("open");
   document.querySelectorAll(".modal-error").forEach(function(e){ e.style.display="none"; });
   document.querySelectorAll(".modal-box input").forEach(function(i){ i.value=""; });
@@ -397,12 +407,19 @@ async function doReset() {
 
 async function doReveal() {
   var val = document.getElementById("input-reveal").value;
+  console.log("doReveal called, val=", val, "PASSWORD=", PASSWORD);
   if (val !== PASSWORD) { document.getElementById("err-reveal").style.display="block"; return; }
   try {
     await revealRef.set(true);
+    console.log("revealRef set to true OK");
     closeModal("modal-reveal");
     showToast("Resultats publies !");
-  } catch(e) { showToast("Erreur publication."); }
+    // Forcer l affichage local aussi
+    loadAndShowResults();
+  } catch(e) {
+    console.error("doReveal error:", e);
+    showToast("Erreur publication : " + e.message);
+  }
 }
 
 function showToast(msg) {
