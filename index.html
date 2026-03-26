@@ -366,6 +366,8 @@ async function loadAndShowResults() {
 
 var kbuf = "";
 document.addEventListener("keydown", function(e) {
+  // Ne pas intercepter si un champ de saisie est actif
+  if (document.activeElement && document.activeElement.tagName === "INPUT") return;
   kbuf += e.key.toUpperCase();
   if (kbuf.length > 6) kbuf = kbuf.slice(-6);
   if (kbuf.endsWith("RESET"))  { openModal("modal-reset");  kbuf = ""; }
