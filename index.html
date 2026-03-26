@@ -289,8 +289,9 @@
     ══════════════════════════════════════════════════ */
     firebase.initializeApp(firebaseConfig);
     const db        = firebase.database();
-    const votesRef  = db.ref("votes");
-    const votersRef = db.ref("voters");
+    const votesRef      = db.ref("votes");
+    const votersRef     = db.ref("voters");
+    const voterCountRef = db.ref("voterCount");
 
     const STORAGE_KEY = "vote_cast_v1";
     const grid        = document.getElementById("image-grid");
@@ -350,6 +351,7 @@
       try {
         await votesRef.update(updates);
         await votersRef.push({ ts: Date.now(), choices: [...selected] });
+        await voterCountRef.set(firebase.database.ServerValue.increment(1));
         localStorage.setItem(STORAGE_KEY, "1");
         alreadyVoted = true;
         document.body.classList.add("voted");
@@ -382,8 +384,8 @@
     });
 
     // ── Live voter count ──
-    votersRef.on("value", snap => {
-      const n = snap.numChildren();
+    voterCountRef.on("value", snap => {
+      const n = snap.val() || 0;
       liveCounter.textContent = n === 0 ? "Aucun vote" :
         n === 1 ? "1 votant" : `${n} votants`;
     });
@@ -424,6 +426,7 @@
       try {
         await votesRef.remove();
         await votersRef.remove();
+        await voterCountRef.remove();
         localStorage.removeItem(STORAGE_KEY);
         alreadyVoted = false;
         document.body.classList.remove("voted");
