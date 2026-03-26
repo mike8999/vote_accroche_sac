@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Vote – Sélection d'images</title>
+
+  <!-- Firebase SDK (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    /* ── Variables ──────────────────────────────────── */
+    :root {
+      --bg:        #f5f2ee;
+      --surface:   #ffffff;
+      --ink:       #1a1714;
+      --muted:     #8a8480;
+      --accent:    #d45f2e;
+      --accent2:   #f0c96e;
+      --selected:  #d45f2e;
+      --radius:    12px;
+      --gap:       14px;
+    }
+
+    /* ── Reset & Base ───────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────── */
+    header {
+      position: sticky; top: 0; z-index: 10;
+      background: var(--ink);
+      color: #fff;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    header h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(1.1rem, 3vw, 1.4rem);
+      font-weight: 400;
+    }
+    #live-counter {
+      font-size: 0.78rem;
+      background: var(--accent);
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 999px;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+
+    /* ── Main layout ─────────────────────────────────── */
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 24px 16px 120px;
+    }
+
+    .instructions {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+    .instructions strong { color: var(--ink); }
+
+    /* ── Image Grid ──────────────────────────────────── */
+    #image-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: var(--gap);
+    }
+
+    .card {
+      position: relative;
+      cursor: pointer;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      transition: transform 0.18s, box-shadow 0.18s;
+      user-select: none;
+      outline: 3px solid transparent;
+      outline-offset: 0px;
+    }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 6px 18px rgba(0,0,0,0.13); }
+
+    .card.selected {
+      outline: 3px solid var(--selected);
+      outline-offset: 2px;
+    }
+    .card.selected::after {
+      content: '✓';
+      position: absolute;
+      top: 8px; right: 8px;
+      background: var(--selected);
+      color: #fff;
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700;
+      display: grid; place-items: center;
+    }
+
+    .card img {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Vote bar overlay */
+    .card-footer {
+      padding: 6px 10px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .bar-wrap {
+      flex: 1;
+      height: 5px;
+      background: #e8e4df;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 99px;
+      width: 0%;
+      transition: width 0.6s ease;
+    }
+    .vote-count { font-weight: 600; color: var(--ink); min-width: 24px; text-align: right; }
+
+    /* ── Already voted state ─────────────────────────── */
+    body.voted .card { cursor: default; }
+    body.voted .card:hover { transform: none; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    body.voted .card.selected { outline-color: var(--accent2); }
+    body.voted .card.selected::after { background: var(--accent2); color: var(--ink); }
+
+    /* ── Sticky bottom bar ───────────────────────────── */
+    #bottom-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-top: 1px solid #e5e0da;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      z-index: 10;
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.07);
+    }
+    #selection-info { font-size: 0.88rem; color: var(--muted); }
+    #selection-info strong { color: var(--ink); }
+
+    #btn-vote {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 999px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.15s;
+    }
+    #btn-vote:hover:not(:disabled) { background: #bf4f22; transform: scale(1.03); }
+    #btn-vote:disabled { background: #ccc; cursor: not-allowed; }
+
+    /* Already voted message */
+    #voted-msg {
+      display: none;
+      font-size: 0.9rem;
+      background: #edf7ed;
+      color: #2d7a2d;
+      border-radius: 999px;
+      padding: 10px 20px;
+      font-weight: 500;
+    }
+    body.voted #btn-vote { display: none; }
+    body.voted #voted-msg { display: block; }
+    body.voted #selection-info { display: none; }
+
+    /* ── Toast ───────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 90px; left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--ink);
+      color: #fff;
+      padding: 10px 22px;
+      border-radius: 999px;
+      font-size: 0.88rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s, transform 0.3s;
+      z-index: 99;
+      white-space: nowrap;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── Responsive ──────────────────────────────────── */
+    @media (max-width: 480px) {
+      #image-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>🗳️ Sélection d'images</h1>
+    <span id="live-counter">… votants</span>
+  </header>
+
+  <main>
+    <p class="instructions">
+      <strong>Choisissez vos images préférées</strong> puis validez votre vote.
+      Vous pouvez en sélectionner plusieurs.
+    </p>
+    <div id="image-grid"></div>
+  </main>
+
+  <div id="bottom-bar">
+    <span id="selection-info"><strong>0</strong> sélectionnée(s)</span>
+    <button id="btn-vote" disabled>Valider mon vote</button>
+    <span id="voted-msg">✅ Vote enregistré — merci !</span>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    /* ══════════════════════════════════════════════════
+       ① CONFIGURATION FIREBASE
+       → Remplacez ces valeurs par celles de votre projet
+    ══════════════════════════════════════════════════ */
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+	const firebaseConfig = {
+	apiKey: "AIzaSyA6J3CtoVq5YnOaggxi8W3QhJCngBVZNEw",
+	authDomain: "accroche-sac.firebaseapp.com",
+	databaseURL: "https://accroche-sac-default-rtdb.europe-west1.firebasedatabase.app",
+	projectId: "accroche-sac",
+	storageBucket: "accroche-sac.firebasestorage.app",
+	messagingSenderId: "624540659147",
+	appId: "1:624540659147:web:3bdb39ceb0f877ca1d9a4e",
+	measurementId: "G-V53WR0EXPM"
+};
+    };
+
+    /* ══════════════════════════════════════════════════
+       ② LISTE DES IMAGES
+       → Remplacez les noms par vos fichiers dans /images/
+    ══════════════════════════════════════════════════ */
+    const IMAGES = [
+      { id: "img01", src: "images/image01.jpg", label: "Image 1"  },
+      { id: "img02", src: "images/image02.jpg", label: "Image 2"  },
+      { id: "img03", src: "images/image03.jpg", label: "Image 3"  },
+      { id: "img04", src: "images/image04.jpg", label: "Image 4"  },
+      { id: "img05", src: "images/image05.jpg", label: "Image 5"  },
+      { id: "img06", src: "images/image06.jpg", label: "Image 6"  },
+      { id: "img07", src: "images/image07.jpg", label: "Image 7"  },
+      { id: "img08", src: "images/image08.jpg", label: "Image 8"  },
+      { id: "img09", src: "images/image09.jpg", label: "Image 9"  },
+      { id: "img10", src: "images/image10.jpg", label: "Image 10" },
+      { id: "img11", src: "images/image11.jpg", label: "Image 11" },
+      { id: "img12", src: "images/image12.jpg", label: "Image 12" },
+      { id: "img13", src: "images/image13.jpg", label: "Image 13" },
+      { id: "img14", src: "images/image14.jpg", label: "Image 14" },
+      { id: "img15", src: "images/image15.jpg", label: "Image 15" },
+      { id: "img16", src: "images/image16.jpg", label: "Image 16" },
+      { id: "img17", src: "images/image17.jpg", label: "Image 17" },
+      { id: "img18", src: "images/image18.jpg", label: "Image 18" },
+      { id: "img19", src: "images/image19.jpg", label: "Image 19" },
+      { id: "img20", src: "images/image20.jpg", label: "Image 20" },
+    ];
+
+    /* ══════════════════════════════════════════════════
+       ③ APP LOGIC
+    ══════════════════════════════════════════════════ */
+    firebase.initializeApp(firebaseConfig);
+    const db        = firebase.database();
+    const votesRef  = db.ref("votes");
+    const votersRef = db.ref("voters");
+
+    const STORAGE_KEY = "vote_cast_v1";
+    const grid        = document.getElementById("image-grid");
+    const btnVote     = document.getElementById("btn-vote");
+    const selInfo     = document.getElementById("selection-info");
+    const liveCounter = document.getElementById("live-counter");
+    const toast       = document.getElementById("toast");
+
+    let selected  = new Set();
+    let voteCounts = {};
+    let maxVotes   = 1;
+    let alreadyVoted = !!localStorage.getItem(STORAGE_KEY);
+
+    // ── Build grid ──
+    IMAGES.forEach(({ id, src, label }) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.dataset.id = id;
+      card.innerHTML = `
+        <img src="${src}" alt="${label}" loading="lazy">
+        <div class="card-footer">
+          <div class="bar-wrap"><div class="bar-fill" id="bar-${id}"></div></div>
+          <span class="vote-count" id="count-${id}">0</span>
+        </div>`;
+      if (!alreadyVoted) {
+        card.addEventListener("click", () => toggleSelect(id));
+      }
+      grid.appendChild(card);
+    });
+
+    // ── Toggle selection ──
+    function toggleSelect(id) {
+      if (alreadyVoted) return;
+      const card = grid.querySelector(`[data-id="${id}"]`);
+      if (selected.has(id)) {
+        selected.delete(id);
+        card.classList.remove("selected");
+      } else {
+        selected.add(id);
+        card.classList.add("selected");
+      }
+      const n = selected.size;
+      selInfo.innerHTML = `<strong>${n}</strong> sélectionnée(s)`;
+      btnVote.disabled = n === 0;
+    }
+
+    // ── Submit vote ──
+    btnVote.addEventListener("click", async () => {
+      if (selected.size === 0 || alreadyVoted) return;
+      btnVote.disabled = true;
+
+      const updates = {};
+      selected.forEach(id => {
+        updates[id] = firebase.database.ServerValue.increment(1);
+      });
+
+      try {
+        await votesRef.update(updates);
+        await votersRef.push({ ts: Date.now(), choices: [...selected] });
+        localStorage.setItem(STORAGE_KEY, "1");
+        alreadyVoted = true;
+        document.body.classList.add("voted");
+        showToast("Vote enregistré 🎉");
+      } catch (e) {
+        console.error(e);
+        btnVote.disabled = false;
+        showToast("Erreur — réessayez.");
+      }
+    });
+
+    // ── Restore already-voted state ──
+    if (alreadyVoted) {
+      document.body.classList.add("voted");
+    }
+
+    // ── Real-time vote counts ──
+    votesRef.on("value", snap => {
+      const data = snap.val() || {};
+      voteCounts = data;
+      maxVotes = Math.max(1, ...Object.values(data));
+      IMAGES.forEach(({ id }) => {
+        const count = data[id] || 0;
+        const pct   = Math.round((count / maxVotes) * 100);
+        const barEl = document.getElementById(`bar-${id}`);
+        const cntEl = document.getElementById(`count-${id}`);
+        if (barEl) barEl.style.width = pct + "%";
+        if (cntEl) cntEl.textContent = count;
+      });
+    });
+
+    // ── Live voter count ──
+    votersRef.on("value", snap => {
+      const n = snap.numChildren();
+      liveCounter.textContent = n === 0 ? "Aucun vote" :
+        n === 1 ? "1 votant" : `${n} votants`;
+    });
+
+    // ── Toast helper ──
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), 3000);
+    }
+  </script>
+</body>
+</html>
